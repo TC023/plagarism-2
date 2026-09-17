@@ -1,0 +1,7 @@
+apted==1.0.3
+dotenv==0.9.9
+joblib==1.5.3
+numpy==2.4.6
+openai==2.38.0
+pandas==3.0.3
+scikit-learn==1.8.0
