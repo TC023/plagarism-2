@@ -131,40 +131,31 @@ def _clean_whitespace(code: str) -> str:
 
 
 def preprocess_code(code: str) -> str:
-    """Remove comments/docstrings and normalize whitespace while preserving indentation."""
+    """Remove comments/docstrings and normalize unnecessary whitespace."""
     if not isinstance(code, str):
         raise TypeError("code must be a string")
 
     docstring_ranges = _docstring_ranges(code)
-    lines = code.splitlines()
+    output_tokens: list[tokenize.TokenInfo] = []
 
-    # Find the column where the comment starts on each line via the tokenizer,
-    # so a '#' inside a string literal is never mistaken for a comment.
-    comment_cols: dict[int, int] = {}
-    tokenized = True
     try:
         stream = io.StringIO(code).readline
         for token_info in tokenize.generate_tokens(stream):
-            if token_info.type == tokenize.COMMENT:
-                comment_cols[token_info.start[0]] = token_info.start[1]
-    except (tokenize.TokenError, SyntaxError):
-        tokenized = False
+            token_type = token_info.type
+            start_line = token_info.start[0]
 
-    cleaned_lines = []
-    for i, line in enumerate(lines, start=1):
-        # Skip docstring lines
-        if any(start <= i <= end for start, end in docstring_ranges):
-            continue
+            if token_type == tokenize.COMMENT:
+                continue
+            if token_type == tokenize.STRING and any(start <= start_line <= end for start, end in docstring_ranges):
+                continue
 
-        # Remove comments
-        if i in comment_cols:
-            line = line[: comment_cols[i]]
-        elif not tokenized and "#" in line:
-            line = line.split("#", 1)[0]
+            output_tokens.append(token_info)
 
-        cleaned_lines.append(line.rstrip())
+        cleaned = tokenize.untokenize(output_tokens)
+    except tokenize.TokenError:
+        cleaned = "\n".join(line.split("#", 1)[0] for line in code.splitlines())
 
-    return "\n".join(cleaned_lines).strip()
+    return _clean_whitespace(cleaned)
 
 
 def tokenize_code(code: str) -> list[str]:
@@ -377,8 +368,6 @@ def analyze_lexical_statistical_similarity(
     symmetric_kl = (kl_a_to_b + kl_b_to_a) / 2
     kl_similarity = 1 / (1 + symmetric_kl)
 
-    entropy_difference = abs(entropy_a - entropy_b)
-
     categories_a = categorize_tokens(normalized_tokens_a)
     categories_b = categorize_tokens(normalized_tokens_b)
     matrix_a = markov_transition_matrix(categories_a)
@@ -401,11 +390,9 @@ def analyze_lexical_statistical_similarity(
         "tfidf_cosine_similarity": cosine,
         "entropy_a": entropy_a,
         "entropy_b": entropy_b,
-        "kl_similarity": kl_similarity,
         "kl_divergence_a_to_b": kl_a_to_b,
         "kl_divergence_b_to_a": kl_b_to_a,
         "markov_similarity": markov_similarity,
-        "entropy_difference": entropy_difference,
         "lexical_statistical_score": lexical_statistical_score,
     }
 
